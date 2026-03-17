@@ -39,7 +39,7 @@ const UploadZone = ({ onUpload, error }) => {
       >
         <input 
           type="file" 
-          accept=".pdf" 
+          accept=".pdf,.doc,.docx,.txt,image/*" 
           ref={fileInputRef} 
           style={{ display: 'none' }} 
           onChange={handleFileChange}
@@ -53,7 +53,7 @@ const UploadZone = ({ onUpload, error }) => {
         <p>or click to browse your files</p>
 
         <div className="file-info">
-          PDF up to 5MB
+          PDF, DOCX, TXT, JPG, PNG up to 10MB
         </div>
       </div>
 

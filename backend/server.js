@@ -2,8 +2,11 @@ const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const pdfParse = require('pdf-parse');
-const { OpenAI } = require('openai');
 const dotenv = require('dotenv');
+const Tesseract = require('tesseract.js');
+const { connectDB } = require('./db');
+const Resume = require('./models/Resume');
+const { analyzeResume, extractSkills } = require('./analyzer/engine');
 
 dotenv.config();
 
@@ -14,88 +17,187 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Set up OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Connect to MongoDB
+connectDB();
 
 // Configure Multer for in-memory file uploads
-const upload = multer({ 
+const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit (images can be larger)
 });
 
-// Health check endpoint
+// ─── Helper: Extract text from file buffer ──────────────────────────────────
+
+async function extractText(file) {
+  const mimeType = file.mimetype;
+
+  if (mimeType === 'application/pdf') {
+    const pdfData = await pdfParse(file.buffer);
+    return pdfData.text;
+  } else if (
+    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    mimeType === 'application/msword'
+  ) {
+    const mammoth = require('mammoth');
+    const result = await mammoth.extractRawText({ buffer: file.buffer });
+    return result.value;
+  } else if (mimeType === 'text/plain') {
+    return file.buffer.toString('utf-8');
+  } else if (mimeType.startsWith('image/')) {
+    // Use Tesseract.js for local OCR on images (no API key needed)
+    console.log(`📷 Running OCR on image: ${file.originalname}...`);
+    const { data: { text } } = await Tesseract.recognize(file.buffer, 'eng', {
+      logger: (info) => {
+        if (info.status === 'recognizing text') {
+          console.log(`  OCR progress: ${Math.round(info.progress * 100)}%`);
+        }
+      }
+    });
+    console.log(`✅ OCR complete. Extracted ${text.length} characters.`);
+    return text;
+  } else {
+    throw new Error('Unsupported file type. Please upload a PDF, DOCX, TXT, or Image (JPG/PNG) file.');
+  }
+}
+
+// ─── Health Check ────────────────────────────────────────────────────────────
+
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'SkillScan AI Backend is running' });
+  res.json({ status: 'ok', message: 'SkillScan AI Backend is running (Local NLP Mode)' });
 });
 
-// Upload and analyze endpoint
+// ─── Analyze Resume ─────────────────────────────────────────────────────────
+
 app.post('/api/analyze', upload.single('resume'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    if (req.file.mimetype !== 'application/pdf') {
-       return res.status(400).json({ error: 'Only PDF files are supported for now' });
-    }
-
-    // 1. Extract text from PDF
-    const pdfData = await pdfParse(req.file.buffer);
-    const textContent = pdfData.text;
+    // 1. Extract text
+    const textContent = await extractText(req.file);
 
     if (!textContent || textContent.trim().length === 0) {
-      return res.status(400).json({ error: 'Could not extract text from the provided PDF.' });
+      return res.status(400).json({ error: 'Could not extract text from the provided file.' });
     }
 
-    // If no OpenAI key, just return the text to prove extraction worked (useful for testing before adding key)
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your_openai_api_key_here') {
-       return res.json({
-         ats_score: 72,
-         extracted_skills: ['JavaScript (Mock)', 'React (Mock)'],
-         missing_competencies: ['TypeScript (Mock)'],
-         matched_roles: [{ title: 'Frontend Developer (Mock)', matchPercentage: 85 }],
-         suggestions: ['This is a mock response because OPENAI_API_KEY is not set.', 'Add more quantifiable achievements.'],
-         skill_development: [
-           { skill: "TypeScript", recommendation: "Take a crash course on TypeScript generics and start converting a small React JS project to TS." }
-         ]
-       });
-    }
+    // 2. Get all stored resumes from MongoDB for comparison
+    const allDbResumes = await Resume.find({}, 'fileName text skills').lean();
 
-    // 2. Call OpenAI API for structured JSON extraction
-    const prompt = `
-      You are an expert technical recruiter and AI resume analyzer.
-      Analyze the following resume text and extract the required information in pure JSON format:
-      1. 'ats_score': An integer from 0-100 estimating how well this resume would perform in an Applicant Tracking System.
-      2. 'extracted_skills': An array of strings representing the technical and soft skills found.
-      3. 'missing_competencies': An array of strings representing skills highly valued in the industry but missing from this resume.
-      4. 'matched_roles': An array of objects with 'title' (string) and 'matchPercentage' (number 0-100).
-      5. 'suggestions': An array of actionable feedback strings to improve the resume.
-      6. 'skill_development': An array of objects with 'skill' (string representing the missing skill) and 'recommendation' (string explaining best ways/resources to learn it).
+    // 3. Run local analysis
+    const result = analyzeResume(textContent, allDbResumes);
 
-      Resume Text:
-      ${textContent.substring(0, 4000)} // truncate to avoid massive token usage for now
-      
-      Respond EXCLUSIVELY with valid JSON matching the structure.
-    `;
-
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.3,
+    // 4. Also store this resume in the database for future comparisons
+    const newResume = new Resume({
+      fileName: req.file.originalname,
+      text: textContent,
+      skills: result.extracted_skills
     });
+    await newResume.save();
 
-    const resultJsonStr = response.choices[0].message.content;
-    const resultJson = JSON.parse(resultJsonStr);
-
-    res.json(resultJson);
-
+    res.json(result);
   } catch (error) {
     console.error('Error processing resume:', error);
     res.status(500).json({ error: 'Failed to analyze resume', details: error.message });
   }
 });
+
+// ─── Seed Multiple Resumes ──────────────────────────────────────────────────
+
+app.post('/api/seed', upload.array('resumes', 50), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    const results = { stored: 0, failed: 0, errors: [] };
+
+    for (const file of req.files) {
+      try {
+        const textContent = await extractText(file);
+
+        if (!textContent || textContent.trim().length === 0) {
+          results.failed++;
+          results.errors.push(`${file.originalname}: Could not extract text`);
+          continue;
+        }
+
+        const skills = extractSkills(textContent);
+
+        const resume = new Resume({
+          fileName: file.originalname,
+          text: textContent,
+          skills: skills
+        });
+        await resume.save();
+        results.stored++;
+      } catch (err) {
+        results.failed++;
+        results.errors.push(`${file.originalname}: ${err.message}`);
+      }
+    }
+
+    res.json(results);
+  } catch (error) {
+    console.error('Error seeding resumes:', error);
+    res.status(500).json({ error: 'Failed to seed resumes', details: error.message });
+  }
+});
+
+// ─── Get Stats ──────────────────────────────────────────────────────────────
+
+app.get('/api/stats', async (req, res) => {
+  try {
+    const resumeCount = await Resume.countDocuments();
+    const resumes = await Resume.find({}, 'skills').lean();
+
+    // Count skill frequencies
+    const skillFreq = {};
+    for (const resume of resumes) {
+      for (const skill of resume.skills) {
+        skillFreq[skill] = (skillFreq[skill] || 0) + 1;
+      }
+    }
+
+    const topSkills = Object.entries(skillFreq)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([skill, count]) => ({ skill, count }));
+
+    res.json({ resumeCount, topSkills });
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// ─── Get Stored Resumes List ────────────────────────────────────────────────
+
+app.get('/api/resumes', async (req, res) => {
+  try {
+    const resumes = await Resume.find({}, 'fileName skills uploadedAt')
+      .sort({ uploadedAt: -1 })
+      .lean();
+
+    res.json(resumes);
+  } catch (error) {
+    console.error('Error fetching resumes:', error);
+    res.status(500).json({ error: 'Failed to fetch resumes' });
+  }
+});
+
+// ─── Delete a Resume ────────────────────────────────────────────────────────
+
+app.delete('/api/resumes/:id', async (req, res) => {
+  try {
+    await Resume.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete resume' });
+  }
+});
+
+// ─── Start Server ───────────────────────────────────────────────────────────
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
