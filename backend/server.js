@@ -15,15 +15,11 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 5000;
 
-// Middleware
-const allowedOrigins = process.env.FRONTEND_URL 
-  ? [process.env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000']
-  : '*';
-
+// Middleware - Allow all origins and headers to ensure smooth deployment across Vercel and preview URLs
 app.use(cors({
-  origin: allowedOrigins,
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Gemini-Key', 'x-gemini-key']
+  allowedHeaders: '*'
 }));
 app.use(express.json());
 
