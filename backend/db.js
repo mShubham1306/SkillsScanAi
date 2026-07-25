@@ -1,5 +1,19 @@
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
+const dns = require('dns');
+
+// Programmatically set Google DNS servers and force IPv4 first for DNS resolution
+// to solve SRV record lookup issues on local networks
+try {
+  if (dns.setServers) {
+    dns.setServers(['8.8.8.8', '8.8.4.4']);
+  }
+  if (dns.setDefaultResultOrder) {
+    dns.setDefaultResultOrder('ipv4first');
+  }
+} catch (dnsErr) {
+  console.warn('⚠️ DNS configuration warning:', dnsErr.message);
+}
 
 dotenv.config();
 
