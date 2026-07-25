@@ -169,7 +169,17 @@ app.post('/api/analyze', upload.single('resume'), async (req, res) => {
     const newResume = new Resume({
       fileName: req.file.originalname,
       text: textContent,
-      skills: result.extracted_skills
+      skills: result.extracted_skills || [],
+      fileSize: req.file.size || 0,
+      mimeType: req.file.mimetype || 'application/octet-stream',
+      analysisReport: {
+        ats_score: result.ats_score,
+        missing_competencies: result.missing_competencies || [],
+        matched_roles: result.matched_roles || [],
+        suggestions: result.suggestions || [],
+        skill_development: result.skill_development || [],
+        executive_summary: result.executive_summary || ''
+      }
     });
     const savedResume = await newResume.save();
 
