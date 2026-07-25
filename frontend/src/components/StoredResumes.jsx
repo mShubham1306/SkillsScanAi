@@ -1,9 +1,10 @@
 import React from 'react';
+import { API_BASE_URL } from '../config';
 
 const StoredResumes = ({ resumes, onRefresh }) => {
   const handleDelete = async (id) => {
     try {
-      await fetch(`http://localhost:5000/api/resumes/${id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE_URL}/api/resumes/${id}`, { method: 'DELETE' });
       onRefresh();
     } catch (err) {
       console.error('Failed to delete resume:', err);

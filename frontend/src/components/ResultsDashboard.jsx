@@ -1,9 +1,21 @@
 import React from 'react';
+import ResumeChatbot from './ResumeChatbot';
 
-const ResultsDashboard = ({ data, onReset }) => {
+const ResultsDashboard = ({ data, apiKey, onReset }) => {
   if (!data) return null;
 
-  const { ats_score = 0, extracted_skills = [], missing_competencies = [], matched_roles = [], suggestions = [], skill_development = [], corpus_stats = {} } = data;
+  const { 
+    ats_score = 0, 
+    extracted_skills = [], 
+    missing_competencies = [], 
+    matched_roles = [], 
+    suggestions = [], 
+    skill_development = [], 
+    corpus_stats = {},
+    resumeId,
+    fileName,
+    executive_summary
+  } = data;
 
   // Color based on score
   const scoreColor = ats_score >= 70 ? '#06d6a0' : ats_score >= 40 ? '#fbbf24' : '#f43f5e';
@@ -75,6 +87,19 @@ const ResultsDashboard = ({ data, onReset }) => {
              </div>
            </div>
         </div>
+
+        {/* AI Executive Summary */}
+        {executive_summary && (
+          <div className="glass-panel" style={{ padding: '28px', gridColumn: '1 / -1', borderLeft: '4px solid #10b981', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="panel-header" style={{ marginBottom: '0px' }}>
+              <div className="icon-box" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05))', border: '1px solid rgba(16, 185, 129, 0.2)' }}>✨</div>
+              <h2 style={{ color: '#34d399', margin: 0 }}>AI Executive Summary</h2>
+            </div>
+            <p style={{ margin: 0, color: '#e8edf5', lineHeight: '1.7', fontSize: '0.95rem', fontStyle: 'italic' }}>
+              "{executive_summary}"
+            </p>
+          </div>
+        )}
 
         {/* Identified Skills */}
         <div className="glass-panel" style={{ padding: '28px' }}>
@@ -176,6 +201,13 @@ const ResultsDashboard = ({ data, onReset }) => {
           </div>
         </div>
       )}
+
+      {/* Chatbot Section */}
+      <ResumeChatbot
+        resumeId={resumeId}
+        fileName={fileName}
+        apiKey={apiKey}
+      />
 
       <div className="action-area">
         <button onClick={onReset} className="btn-primary">

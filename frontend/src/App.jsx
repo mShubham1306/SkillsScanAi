@@ -3,6 +3,8 @@ import UploadZone from './components/UploadZone';
 import ResultsDashboard from './components/ResultsDashboard';
 import SeedUpload from './components/SeedUpload';
 import StoredResumes from './components/StoredResumes';
+import ApiKeyConfig from './components/ApiKeyConfig';
+import { API_BASE_URL } from './config';
 
 function App() {
   const [analysisResult, setAnalysisResult] = useState(null);
@@ -11,10 +13,34 @@ function App() {
   const [activeTab, setActiveTab] = useState('analyze');
   const [stats, setStats] = useState({ resumeCount: 0, topSkills: [] });
   const [storedResumes, setStoredResumes] = useState([]);
+  const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
+  const [isBackendKeyAvailable, setIsBackendKeyAvailable] = useState(false);
+
+  useEffect(() => {
+    const checkBackendHealth = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/health`);
+        const data = await res.json();
+        setIsBackendKeyAvailable(!!data.isBackendKeyAvailable);
+      } catch (err) {
+        console.error('Failed to check backend health:', err);
+      }
+    };
+    checkBackendHealth();
+  }, []);
+
+  const handleKeyChange = (newKey) => {
+    setApiKey(newKey);
+    if (newKey) {
+      localStorage.setItem('gemini_api_key', newKey);
+    } else {
+      localStorage.removeItem('gemini_api_key');
+    }
+  };
 
   const fetchStats = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/stats');
+      const res = await fetch(`${API_BASE_URL}/api/stats`);
       const data = await res.json();
       setStats(data);
     } catch (err) {
@@ -24,7 +50,7 @@ function App() {
 
   const fetchResumes = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/resumes');
+      const res = await fetch(`${API_BASE_URL}/api/resumes`);
       const data = await res.json();
       setStoredResumes(data);
     } catch (err) {
@@ -51,8 +77,14 @@ function App() {
     formData.append('resume', file);
 
     try {
-      const response = await fetch('http://localhost:5000/api/analyze', {
+      const headers = {};
+      if (apiKey) {
+        headers['X-Gemini-Key'] = apiKey;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/analyze`, {
         method: 'POST',
+        headers: headers,
         body: formData,
       });
 
@@ -90,10 +122,11 @@ function App() {
             <span className="stat-number">{stats.topSkills?.length || 0}</span>
             <span className="stat-label">Unique Skills Tracked</span>
           </div>
-          <div className="stat-item stat-mode">
-            <span className="stat-badge">🧠 Local NLP</span>
-            <span className="stat-label">No API Key Needed</span>
-          </div>
+          <ApiKeyConfig
+            apiKey={apiKey}
+            onKeyChange={handleKeyChange}
+            isBackendKeyAvailable={isBackendKeyAvailable}
+          />
         </div>
       </div>
 
@@ -149,6 +182,7 @@ function App() {
       {analysisResult && !isScanning && (
         <ResultsDashboard
           data={analysisResult}
+          apiKey={apiKey}
           onReset={() => {
             setAnalysisResult(null);
             handleRefresh();

@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { API_BASE_URL } from '../config';
 
 const SeedUpload = ({ onSeeded }) => {
   const fileInputRef = useRef(null);
@@ -19,7 +20,7 @@ const SeedUpload = ({ onSeeded }) => {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/seed', {
+      const response = await fetch(`${API_BASE_URL}/api/seed`, {
         method: 'POST',
         body: formData,
       });
