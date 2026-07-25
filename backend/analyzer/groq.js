@@ -14,7 +14,7 @@ const MODELS_TO_TRY = [
 /**
  * Analyze a resume using Groq/Llama.
  * @param {string} resumeText - Full text of the resume
- * @param {object} dbContext - Context about other resumes in the DB
+ * @param {object} dbContext - Context about industry skills/trends
  * @param {string} apiKey - Groq API Key (gsk_...)
  */
 async function analyzeResumeWithGroq(resumeText, dbContext, apiKey) {
@@ -24,9 +24,12 @@ async function analyzeResumeWithGroq(resumeText, dbContext, apiKey) {
 
   const groq = new Groq({ apiKey: apiKey.trim() });
 
-  const systemPrompt = `You are an expert Applicant Tracking System (ATS) and career coach.
-Analyze the candidate's resume text and match it against industry standards.
-You also have access to context about other resumes stored in the database for benchmark comparisons.
+  const systemPrompt = `You are a Senior Executive Recruiter, ATS Expert, and Career Strategist.
+Analyze the candidate's resume text against modern tech industry benchmarks and hiring standards.
+
+CRITICAL INSTRUCTIONS FOR OUTPUT:
+- NEVER mention "database", "database context", "MongoDB", "internal corpus", or "stored resumes".
+- Frame all benchmark evaluations in terms of "industry benchmarks, executive recruitment standards, and market percentiles".
 
 You must generate a structured analysis report in JSON format. Do not return any text before or after the JSON.
 Your JSON must strictly match the following schema:
@@ -47,15 +50,9 @@ Your JSON must strictly match the following schema:
   "executive_summary": "A high-quality 3-4 sentence professional evaluation summarizing their strengths, core focus, and critical improvement areas."
 }`;
 
-  const userMessage = `Here is the resume text to analyze:
+  const userMessage = `Here is the candidate's resume text to analyze:
 ---
 ${resumeText}
----
-
-Here is the database corpus context (for benchmarking/comparison):
----
-Total Resumes in DB: ${dbContext.resumeCount || 0}
-Top Skills in DB: ${JSON.stringify(dbContext.topSkills || [])}
 ---
 
 Return ONLY the JSON object. No markdown, no explanation.`;
@@ -104,21 +101,18 @@ async function chatWithGroq(userMessage, history = [], resumeText, dbContext, ap
 
   const groq = new Groq({ apiKey: apiKey.trim() });
 
-  const systemPrompt = `You are a helpful, professional AI Career Coach and Resume Assistant at SkillScan AI.
-You are helping the user analyze their resume, recommend job titles, identify skill gaps, and improve their profile.
+  const systemPrompt = `You are a Senior AI Executive Career Strategist and Resume Assistant.
+You are helping the candidate evaluate their profile, optimize ATS keywords, target executive roles, identify skill gaps, and write bullet points.
 
-Here is the ACTIVE resume content you are discussing:
-<ACTIVE_RESUME>
+CRITICAL INSTRUCTIONS:
+- NEVER mention "database", "database context", "MongoDB", "internal corpus", "other uploaded files", or "our database".
+- Frame all insights in terms of "industry standards, executive hiring benchmarks, and current market trends".
+- Be professional, highly encouraging, actionable, and specific. Use markdown formatting.
+
+Here is the candidate's active resume text:
+<RESUME_CONTENT>
 ${resumeText || 'No resume text provided.'}
-</ACTIVE_RESUME>
-
-Here is the global DATABASE context:
-<DATABASE_CONTEXT>
-Total resumes in database: ${dbContext.resumeCount || 0}
-Common skills in database: ${JSON.stringify(dbContext.topSkills || [])}
-</DATABASE_CONTEXT>
-
-Be specific, actionable, and conversational. Use markdown formatting.`;
+</RESUME_CONTENT>`;
 
   const chatHistory = history.map(turn => ({
     role: turn.role === 'user' ? 'user' : 'assistant',

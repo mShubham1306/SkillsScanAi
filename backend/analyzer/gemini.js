@@ -12,9 +12,6 @@ const MODELS_TO_TRY = [
   'gemini-1.5-pro',               // Stable v1 model
 ];
 
-/**
- * Helper to call generateContent with model fallbacks.
- */
 async function generateContentWithFallback(genAI, options) {
   let lastError = null;
   for (const model of MODELS_TO_TRY) {
@@ -36,9 +33,6 @@ async function generateContentWithFallback(genAI, options) {
 
 /**
  * Analyze a resume using Gemini.
- * @param {string} resumeText - Full text of the resume
- * @param {object} dbContext - Context about other resumes in the DB
- * @param {string} apiKey - Gemini API Key
  */
 async function analyzeResumeWithGemini(resumeText, dbContext, apiKey) {
   if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
@@ -47,9 +41,12 @@ async function analyzeResumeWithGemini(resumeText, dbContext, apiKey) {
 
   const genAI = new GoogleGenAI({ apiKey: apiKey.trim() });
 
-  const systemPrompt = `You are an expert Applicant Tracking System (ATS) and career coach.
-Analyze the candidate's resume text and match it against industry standards.
-You also have access to context about other resumes stored in the database for benchmark comparisons.
+  const systemPrompt = `You are a Senior Executive Recruiter, ATS Expert, and Career Strategist.
+Analyze the candidate's resume text against modern tech industry benchmarks and hiring standards.
+
+CRITICAL INSTRUCTIONS FOR OUTPUT:
+- NEVER mention "database", "database context", "MongoDB", "internal corpus", or "stored resumes".
+- Frame all benchmark evaluations in terms of "industry benchmarks, executive recruitment standards, and market percentiles".
 
 You must generate a structured analysis report in JSON format. Do not return any text before or after the JSON.
 Your JSON must strictly match the following schema:
@@ -70,16 +67,9 @@ Your JSON must strictly match the following schema:
   "executive_summary": "A high-quality 3-4 sentence professional evaluation summarizing their strengths, core focus, and critical improvement areas."
 }`;
 
-  const userMessage = `Here is the resume text to analyze:
+  const userMessage = `Here is the candidate's resume text to analyze:
 ---
 ${resumeText}
----
-
-Here is the database corpus context (for benchmarking/comparison):
----
-Total Resumes in DB: ${dbContext.resumeCount || 0}
-Top Skills in DB: ${JSON.stringify(dbContext.topSkills || [])}
-Other resumes in DB: ${JSON.stringify(dbContext.otherResumes || [])}
 ---
 
 Return ONLY the JSON object.`;
@@ -96,9 +86,6 @@ Return ONLY the JSON object.`;
   return cleanAndParseJSON(textResponse);
 }
 
-/**
- * Clean and parse JSON from model response.
- */
 function cleanAndParseJSON(rawText) {
   let cleaned = rawText.trim();
   if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7);
@@ -109,11 +96,6 @@ function cleanAndParseJSON(rawText) {
 
 /**
  * Chat with Gemini about a resume.
- * @param {string} userMessage - User's chat message
- * @param {Array} history - [{ role: 'user'|'model', message: string }]
- * @param {string} resumeText - Active resume text
- * @param {object} dbContext - DB info
- * @param {string} apiKey - Gemini API Key
  */
 async function chatWithGemini(userMessage, history = [], resumeText, dbContext, apiKey) {
   if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
@@ -122,23 +104,18 @@ async function chatWithGemini(userMessage, history = [], resumeText, dbContext, 
 
   const genAI = new GoogleGenAI({ apiKey: apiKey.trim() });
 
-  const systemPrompt = `You are a helpful, professional AI Career Coach and Resume Assistant at SkillScan AI.
-You are helping the user analyze their resume, recommend job titles, identify skill gaps, and improve their profile.
+  const systemPrompt = `You are a Senior AI Executive Career Strategist and Resume Assistant.
+You are helping the candidate evaluate their profile, optimize ATS keywords, target executive roles, identify skill gaps, and write bullet points.
 
-Here is the ACTIVE resume content you are discussing:
-<ACTIVE_RESUME>
+CRITICAL INSTRUCTIONS:
+- NEVER mention "database", "database context", "MongoDB", "internal corpus", "other uploaded files", or "our database".
+- Frame all insights in terms of "industry standards, executive hiring benchmarks, and current market trends".
+- Be professional, highly encouraging, actionable, and specific. Use markdown formatting.
+
+Here is the candidate's active resume text:
+<RESUME_CONTENT>
 ${resumeText || 'No resume text provided.'}
-</ACTIVE_RESUME>
-
-Here is the global DATABASE context (trends and other resumes uploaded by this user):
-<DATABASE_CONTEXT>
-Total resumes in database: ${dbContext.resumeCount || 0}
-Other resume files in database: ${JSON.stringify(dbContext.otherResumes || [])}
-Common skills in database: ${JSON.stringify(dbContext.topSkills || [])}
-</DATABASE_CONTEXT>
-
-Use this context to answer the user's questions. Compare their resume to others in the database when asked.
-Be specific, actionable, and conversational. Use markdown formatting.`;
+</RESUME_CONTENT>`;
 
   const chatHistory = history.map(turn => ({
     role: turn.role === 'user' ? 'user' : 'model',
