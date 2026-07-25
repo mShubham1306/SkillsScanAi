@@ -31,7 +31,7 @@ const UploadZone = ({ onUpload, error }) => {
   return (
     <div className="upload-container">
       <div 
-        className={`glass-card dropzone ${isDragActive ? 'active' : ''}`}
+        className={`dropzone ${isDragActive ? 'active' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -45,12 +45,12 @@ const UploadZone = ({ onUpload, error }) => {
           onChange={handleFileChange}
         />
         
-        <div className="dropzone-icon">
+        <div className="dropzone-icon-wrapper">
           {isDragActive ? "📥" : "📄"}
         </div>
 
         <h3>{isDragActive ? "Drop your resume here" : "Drag & Drop Resume"}</h3>
-        <p>or click to browse your files</p>
+        <p>or click to browse your files from your device</p>
 
         <div className="file-info">
           PDF, DOCX, TXT, JPG, PNG up to 10MB
