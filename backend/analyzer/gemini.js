@@ -5,7 +5,12 @@
 
 const { GoogleGenAI } = require('@google/genai');
 
-const MODELS_TO_TRY = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash-8b'];
+const MODELS_TO_TRY = [
+  'gemini-2.0-flash-lite',       // Lightest quota usage, try first
+  'gemini-2.0-flash',             // Standard free tier
+  'gemini-2.0-flash-exp',         // Experimental fallback
+  'gemini-1.5-pro',               // Stable v1 model
+];
 
 /**
  * Helper to call generateContent with model fallbacks.
