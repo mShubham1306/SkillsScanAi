@@ -8,6 +8,7 @@ const { connectDB } = require('./db');
 const Resume = require('./models/Resume');
 const { analyzeResume, extractSkills, computeCorpusSimilarity } = require('./analyzer/engine');
 const { analyzeResumeWithGemini, chatWithGemini } = require('./analyzer/gemini');
+const { analyzeResumeWithGroq, chatWithGroq } = require('./analyzer/groq');
 
 dotenv.config();
 
@@ -72,11 +73,15 @@ async function extractText(file) {
 // ─── Health Check ────────────────────────────────────────────────────────────
 
 app.get('/api/health', (req, res) => {
-  const hasKey = !!(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0);
+  const hasGeminiKey = !!(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0);
+  const hasGroqKey = !!(process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim().length > 0);
+  const hasKey = hasGeminiKey || hasGroqKey;
+  const aiProvider = hasGroqKey ? 'Groq (Llama)' : hasGeminiKey ? 'Gemini' : 'Local NLP';
   res.json({ 
     status: 'ok', 
-    message: hasKey ? 'SkillScan AI Backend is running (Gemini AI Mode)' : 'SkillScan AI Backend is running (Local NLP Mode)',
-    isBackendKeyAvailable: hasKey
+    message: `SkillScan AI Backend is running (${aiProvider} Mode)`,
+    isBackendKeyAvailable: hasKey,
+    aiProvider
   });
 });
 
@@ -129,21 +134,42 @@ app.post('/api/analyze', upload.single('resume'), async (req, res) => {
     // 2. Get all stored resumes from MongoDB for comparison
     const allDbResumes = await Resume.find({}, 'fileName text skills').lean();
 
-    // 3. Check for Gemini Key
+    // 3. Check for AI Keys (Groq preferred over Gemini)
+    const groqKey = req.headers['x-groq-key'] || process.env.GROQ_API_KEY;
     const geminiKey = req.headers['x-gemini-key'] || process.env.GEMINI_API_KEY;
     
     let result;
     let mode = 'local';
 
-    if (geminiKey && geminiKey.trim().length > 0) {
+    // Try Groq first (free, generous quota)
+    if (groqKey && groqKey.trim().length > 0) {
+      try {
+        console.log('🦙 Running Groq/Llama AI analysis...');
+        const dbContext = await getDbContext();
+        const groqResult = await analyzeResumeWithGroq(textContent, dbContext, groqKey);
+        const similarity = computeCorpusSimilarity(textContent, allDbResumes);
+        result = {
+          ...groqResult,
+          corpus_stats: {
+            total_resumes_in_db: allDbResumes.length,
+            avg_similarity: similarity.avgSimilarity,
+            top_similar_resumes: similarity.topMatches
+          }
+        };
+        mode = 'groq';
+        console.log('✅ Groq analysis complete.');
+      } catch (groqError) {
+        console.error('⚠️ Groq analysis failed, trying Gemini:', groqError.message);
+      }
+    }
+
+    // Try Gemini if Groq not available or failed
+    if (!result && geminiKey && geminiKey.trim().length > 0) {
       try {
         console.log('🤖 Running Gemini AI analysis...');
         const dbContext = await getDbContext();
         const geminiResult = await analyzeResumeWithGemini(textContent, dbContext, geminiKey);
-        
-        // Compute corpus similarity locally so we keep the hybrid intelligence
         const similarity = computeCorpusSimilarity(textContent, allDbResumes);
-        
         result = {
           ...geminiResult,
           corpus_stats: {
@@ -296,10 +322,11 @@ app.delete('/api/resumes/:id', async (req, res) => {
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, resumeId, history } = req.body;
+    const groqKey = req.headers['x-groq-key'] || process.env.GROQ_API_KEY;
     const geminiKey = req.headers['x-gemini-key'] || process.env.GEMINI_API_KEY;
 
-    if (!geminiKey || geminiKey.trim().length === 0) {
-      return res.status(400).json({ error: 'Gemini API Key is required for AI Chatbot.' });
+    if ((!groqKey || groqKey.trim().length === 0) && (!geminiKey || geminiKey.trim().length === 0)) {
+      return res.status(400).json({ error: 'An AI API Key (Groq or Gemini) is required for the AI Chatbot.' });
     }
 
     if (!message) {
@@ -315,7 +342,12 @@ app.post('/api/chat', async (req, res) => {
     }
 
     const dbContext = await getDbContext();
-    const reply = await chatWithGemini(message, history || [], resumeText, dbContext, geminiKey);
+    let reply;
+    if (groqKey && groqKey.trim().length > 0) {
+      reply = await chatWithGroq(message, history || [], resumeText, dbContext, groqKey);
+    } else {
+      reply = await chatWithGemini(message, history || [], resumeText, dbContext, geminiKey);
+    }
     res.json({ reply });
   } catch (error) {
     console.error('Error in chat API:', error);
