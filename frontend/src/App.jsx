@@ -15,6 +15,7 @@ function App() {
   const [storedResumes, setStoredResumes] = useState([]);
   const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [isBackendKeyAvailable, setIsBackendKeyAvailable] = useState(false);
+  const [aiProvider, setAiProvider] = useState('Local NLP');
 
   useEffect(() => {
     const checkBackendHealth = async () => {
@@ -22,6 +23,7 @@ function App() {
         const res = await fetch(`${API_BASE_URL}/api/health`);
         const data = await res.json();
         setIsBackendKeyAvailable(!!data.isBackendKeyAvailable);
+        if (data.aiProvider) setAiProvider(data.aiProvider);
       } catch (err) {
         console.error('Failed to check backend health:', err);
       }
@@ -126,6 +128,7 @@ function App() {
             apiKey={apiKey}
             onKeyChange={handleKeyChange}
             isBackendKeyAvailable={isBackendKeyAvailable}
+            aiProvider={aiProvider}
           />
         </div>
       </div>

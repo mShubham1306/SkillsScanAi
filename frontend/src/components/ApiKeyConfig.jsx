@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-function ApiKeyConfig({ apiKey, onKeyChange, isBackendKeyAvailable }) {
+function ApiKeyConfig({ apiKey, onKeyChange, isBackendKeyAvailable, aiProvider = 'Local NLP' }) {
   const [isOpen, setIsOpen] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey || '');
   const [showKey, setShowKey] = useState(false);
@@ -30,7 +30,11 @@ function ApiKeyConfig({ apiKey, onKeyChange, isBackendKeyAvailable }) {
         style={{ cursor: 'pointer', transition: 'all 0.3s ease' }}
       >
         <span className="stat-badge">
-          {isConfigured ? '✨ Gemini AI Mode' : '🧠 Local NLP Mode'}
+          {isConfigured
+            ? aiProvider === 'Groq (Llama)'
+              ? '🦙 Groq AI Mode'
+              : '✨ Gemini AI Mode'
+            : '🧠 Local NLP Mode'}
         </span>
         <span className="stat-label" style={{ textDecoration: 'underline', color: '#93c5fd' }}>
           {isConfigured ? 'API Key Configured' : 'Configure Gemini API Key'}
